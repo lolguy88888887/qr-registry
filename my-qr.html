@@ -24,8 +24,13 @@
 
         <!-- Manual Input (Fallback if not logged in) -->
         <div id="manualInputSection" class="space-y-4 mb-6">
-            <input type="text" id="userIdInput" placeholder="Enter your User ID..." class="w-full border rounded-lg px-4 py-2 text-center text-sm focus:ring-2 focus:ring-green-500 outline-none">
-            <button id="generateBtn" class="w-full bg-green-600 text-white py-2 rounded-lg font-semibold hover:bg-green-700 transition">Show My Pass</button>
+            <!-- Login Prompt Link -->
+            <div class="p-3 bg-blue-50 border border-blue-100 rounded-lg text-sm text-blue-800 mb-4">
+                Have an account? <a href="login.html" class="font-bold underline hover:text-blue-900">Log in here</a>
+            </div>
+
+            <input type="text" id="userIdInput" placeholder="Or enter User ID manually..." class="w-full border rounded-lg px-4 py-2 text-center text-sm focus:ring-2 focus:ring-green-500 outline-none">
+            <button id="generateBtn" class="w-full bg-green-600 text-white py-2 rounded-lg font-semibold hover:bg-green-700 transition">Show Pass</button>
         </div>
 
         <!-- Action Links -->
@@ -46,4 +51,47 @@
         // Render QR Code helper function
         function renderQR(text) {
             qrcodeContainer.innerHTML = "";
-            new QRCode(qrcodeContainer
+            new QRCode(qrcodeContainer, {
+                text: text,
+                width: 200,
+                height: 200,
+                colorDark: "#000000",
+                colorLight: "#ffffff",
+                correctLevel: QRCode.CorrectLevel.H
+            });
+        }
+
+        // Check if user is logged in from session
+        const loggedInUser = sessionStorage.getItem("loggedInUser");
+        const loggedInName = sessionStorage.getItem("loggedInName");
+
+        if (loggedInUser) {
+            // Auto-load pass for logged-in user
+            greeting.textContent = `Welcome, ${loggedInName || loggedInUser}!`;
+            displayUserId.textContent = loggedInUser;
+            userInfo.classList.remove("hidden");
+            manualSection.classList.add("hidden"); // Hide manual input/login prompt when logged in
+            logoutBtn.classList.remove("hidden");
+            renderQR(loggedInUser);
+        }
+
+        // Manual Generation Listener
+        document.getElementById("generateBtn").addEventListener("click", () => {
+            const idVal = document.getElementById("userIdInput").value.trim();
+            if (!idVal) {
+                alert("Please enter a User ID.");
+                return;
+            }
+            displayUserId.textContent = idVal;
+            userInfo.classList.remove("hidden");
+            renderQR(idVal);
+        });
+
+        // Log out handler
+        logoutBtn.addEventListener("click", () => {
+            sessionStorage.clear();
+            window.location.href = "login.html";
+        });
+    </script>
+</body>
+</html>
