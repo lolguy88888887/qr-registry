@@ -2,131 +2,103 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>QR System Dashboard</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-    <style>
-        body { font-family: Arial, sans-serif; margin: 40px; background: #f4f7f6; }
-        h2 { color: #333; }
-        .card { background: white; padding: 20px; margin-bottom: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        input, button { padding: 10px; margin: 5px 0; font-size: 14px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
-        th, td { padding: 12px; border: 1px solid #ddd; text-align: left; vertical-align: middle; }
-        th { background-color: #007bff; color: white; }
-        .badge-active { color: green; font-weight: bold; }
-        .badge-deactive { color: red; font-weight: bold; }
-        .qr-container { display: inline-block; background: white; padding: 5px; border: 1px solid #ccc; }
-        .download-btn { background: #28a745; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; }
-        .download-btn:hover { background: #218838; }
-    </style>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QR Attendance Dashboard</title>
+    <!-- Tailwind CSS for clean modern styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body>
+<body class="bg-gray-50 min-h-screen p-6">
+    <div class="max-w-4xl mx-auto bg-white rounded-xl shadow-md overflow-hidden p-6">
+        <div class="flex justify-between items-center mb-6">
+            <h1 class="text-2xl font-bold text-gray-800">QR System Dashboard</h1>
+            <div class="space-x-2">
+                <a href="scanner.html" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-blue-700">Go to Scanner</a>
+                <a href="my-qr.html" class="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-green-700">My QR Pass</a>
+            </div>
+        </div>
 
-    <h2>QR System & User Management Dashboard</h2>
+        <!-- Add User Form -->
+        <div class="mb-6 p-4 bg-gray-50 rounded-lg border">
+            <h2 class="text-lg font-semibold mb-3 text-gray-700">Add New User</h2>
+            <form id="addUserForm" class="flex gap-4">
+                <input type="text" id="newUserId" placeholder="User ID (e.g. user123)" required class="flex-1 border rounded-lg px-3 py-2 text-sm">
+                <input type="text" id="newUserName" placeholder="Full Name" required class="flex-1 border rounded-lg px-3 py-2 text-sm">
+                <button type="submit" class="bg-indigo-600 text-white px-5 py-2 rounded-lg text-sm font-semibold hover:bg-indigo-700">Add User</button>
+            </form>
+        </div>
 
-    <div class="card">
-        <h3>Create New User</h3>
-        <form id="userForm">
-            <input type="text" id="userName" placeholder="User Name" required>
-            <button type="submit">Add User & Generate QR</button>
-        </form>
+        <!-- Users Table -->
+        <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+                <thead>
+                    <tr class="bg-gray-100 border-b text-gray-600 text-sm">
+                        <th class="p-3">User ID</th>
+                        <th class="p-3">Name</th>
+                        <th class="p-3">Status</th>
+                        <th class="p-3">Last Scanned</th>
+                    </tr>
+                </thead>
+                <tbody id="userTableBody" class="divide-y text-sm text-gray-700">
+                    <!-- Populated dynamically by Firebase -->
+                </tbody>
+            </table>
+        </div>
     </div>
 
-    <div class="card">
-        <h3>Registered Users & QR Codes</h3>
-        <table>
-            <thead>
-                <tr>
-                    <th>User ID</th>
-                    <th>Name</th>
-                    <th>Status</th>
-                    <th>Last Scanned At</th>
-                    <th>QR Code</th>
-                    <th>Action</th>
-                </tr>
-            </thead>
-            <tbody id="userTableBody">
-                <!-- Dynamic rows will load here -->
-            </tbody>
-        </table>
-    </div>
+    <!-- Firebase SDK & Logic -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
+        import { getFirestore, collection, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
 
-    <script>
-        async function fetchUsers() {
-            try {
-                let response = await fetch('/api/users');
-                let users = await response.json();
-                let tbody = document.getElementById('userTableBody');
-                tbody.innerHTML = '';
-                
-                users.forEach(user => {
-                    let row = document.createElement('tr');
-                    let statusClass = user.status === 'ACTIVE' ? 'badge-active' : 'badge-deactive';
-                    let qrCellId = `qr-${user.id}`;
-                    
-                    row.innerHTML = `
-                        <td>${user.id}</td>
-                        <td>${user.name}</td>
-                        <td><span class="${statusClass}">${user.status}</span></td>
-                        <td>${user.lastScanned || 'Never'}</td>
-                        <td><div id="${qrCellId}" class="qr-container"></div></td>
-                        <td><button class="download-btn" onclick="downloadQR('${user.id}', '${user.name}')">Download QR</button></td>
-                    `;
-                    tbody.appendChild(row);
+        const firebaseConfig = {
+            apiKey: "AIzaSyDMJIliExwHKou9wyckX3_STlA1YIPNhI0",
+            authDomain: "qr-reg-aaadc.firebaseapp.com",
+            projectId: "qr-reg-aaadc",
+            storageBucket: "qr-reg-aaadc.firebasestorage.app",
+            messagingSenderId: "1062255210388",
+            appId: "1:1062255210388:web:5fb8d6fb47b3a3a029e981",
+            measurementId: "G-52EVTSYT57"
+        };
 
-                    new QRCode(document.getElementById(qrCellId), {
-                        text: user.id,
-                        width: 80,
-                        height: 80
-                    });
-                });
-            } catch (err) {
-                console.error("Error fetching users:", err);
-            }
-        }
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
 
-        function downloadQR(userId, userName) {
-            let qrContainer = document.getElementById(`qr-${userId}`);
-            let canvas = qrContainer.querySelector('canvas');
-            if (!canvas) {
-                alert("QR code not ready yet!");
-                return;
-            }
-            let imageURL = canvas.toDataURL("image/png");
-            let link = document.createElement('a');
-            link.href = imageURL;
-            link.download = `${userName}_${userId}_QR.png`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-        }
-
-        document.getElementById('userForm').addEventListener('submit', async function(e) {
-            e.preventDefault();
-            let nameInput = document.getElementById('userName');
-            let name = nameInput.value.trim();
-
-            if (!name) return;
-
-            try {
-                let res = await fetch('/api/users', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name: name })
-                });
-
-                if (res.ok) {
-                    nameInput.value = '';
-                    fetchUsers();
-                } else {
-                    alert("Failed to add user on server.");
-                }
-            } catch (err) {
-                console.error("Network error:", err);
-            }
+        // Real-time listener
+        onSnapshot(collection(db, "users"), (snapshot) => {
+            const tbody = document.getElementById("userTableBody");
+            tbody.innerHTML = "";
+            snapshot.forEach((docSnap) => {
+                const user = docSnap.data();
+                const statusColor = user.status === 'ACTIVE' ? 'text-green-600 font-bold' : 'text-red-500 font-semibold';
+                tbody.innerHTML += `
+                    <tr class="hover:bg-gray-50">
+                        <td class="p-3 font-mono">${docSnap.id}</td>
+                        <td class="p-3">${user.name || 'N/A'}</td>
+                        <td class="p-3 ${statusColor}">${user.status || 'DEACTIVE'}</td>
+                        <td class="p-3 text-gray-500">${user.lastScanned || 'Never'}</td>
+                    </tr>
+                `;
+            });
         });
 
-        fetchUsers();
-        setInterval(fetchUsers, 3000);
+        // Handle Add User
+        document.getElementById("addUserForm").addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const id = document.getElementById("newUserId").value.trim();
+            const name = document.getElementById("newUserName").value.trim();
+
+            try {
+                await setDoc(doc(db, "users", id), {
+                    name: name,
+                    status: "DEACTIVE",
+                    lastScanned: "Never"
+                });
+                document.getElementById("addUserForm").reset();
+                alert("User added successfully!");
+            } catch (err) {
+                alert("Error adding user: " + err.message);
+            }
+        });
     </script>
 </body>
 </html>
