@@ -4,16 +4,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>QR Attendance Dashboard</title>
-    <!-- Tailwind CSS for clean modern styling -->
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-gray-50 min-h-screen p-6">
-    <div class="max-w-4xl mx-auto bg-white rounded-xl shadow-md overflow-hidden p-6">
+    <div class="max-w-5xl mx-auto bg-white rounded-xl shadow-md overflow-hidden p-6">
         <div class="flex justify-between items-center mb-6">
             <h1 class="text-2xl font-bold text-gray-800">QR System Dashboard</h1>
             <div class="space-x-2">
-                <a href="scanner.html" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-blue-700">Go to Scanner</a>
-                <a href="my-qr.html" class="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-green-700">My QR Pass</a>
+                <a href="my-qr.html" class="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-green-700">My QR Pass & Scanner</a>
             </div>
         </div>
 
@@ -36,6 +35,7 @@
                         <th class="p-3">Name</th>
                         <th class="p-3">Status</th>
                         <th class="p-3">Last Scanned</th>
+                        <th class="p-3 text-center">Action</th>
                     </tr>
                 </thead>
                 <tbody id="userTableBody" class="divide-y text-sm text-gray-700">
@@ -48,7 +48,7 @@
     <!-- Firebase SDK & Logic -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
-        import { getFirestore, collection, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
+        import { getFirestore, collection, doc, setDoc, updateDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyDMJIliExwHKou9wyckX3_STlA1YIPNhI0",
@@ -63,25 +63,56 @@
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
 
-        // Real-time listener
+        // Real-time listener: Хэрэглэгчдийн жагсаалтыг унших
         onSnapshot(collection(db, "users"), (snapshot) => {
             const tbody = document.getElementById("userTableBody");
             tbody.innerHTML = "";
+            
             snapshot.forEach((docSnap) => {
                 const user = docSnap.data();
-                const statusColor = user.status === 'ACTIVE' ? 'text-green-600 font-bold' : 'text-red-500 font-semibold';
+                const userId = docSnap.id;
+                const isStatusActive = user.status === 'ACTIVE';
+
+                const statusBadge = isStatusActive 
+                    ? `<span class="bg-green-100 text-green-700 px-2.5 py-1 rounded-full text-xs font-bold">ACTIVE</span>`
+                    : `<span class="bg-red-100 text-red-700 px-2.5 py-1 rounded-full text-xs font-bold">DEACTIVE</span>`;
+
+                const buttonText = isStatusActive ? "Set DEACTIVE" : "Set ACTIVE";
+                const buttonColor = isStatusActive 
+                    ? "bg-red-50 text-red-600 border-red-200 hover:bg-red-100" 
+                    : "bg-green-50 text-green-600 border-green-200 hover:bg-green-100";
+
                 tbody.innerHTML += `
                     <tr class="hover:bg-gray-50">
-                        <td class="p-3 font-mono">${docSnap.id}</td>
+                        <td class="p-3 font-mono font-semibold">${userId}</td>
                         <td class="p-3">${user.name || 'N/A'}</td>
-                        <td class="p-3 ${statusColor}">${user.status || 'DEACTIVE'}</td>
-                        <td class="p-3 text-gray-500">${user.lastScanned || 'Never'}</td>
+                        <td class="p-3">${statusBadge}</td>
+                        <td class="p-3 text-gray-500 text-xs">${user.lastScanned || 'Never'}</td>
+                        <td class="p-3 text-center">
+                            <button onclick="toggleUserStatus('${userId}', '${user.status || 'DEACTIVE'}')" class="border ${buttonColor} px-3 py-1 rounded-lg text-xs font-semibold transition">
+                                ${buttonText}
+                            </button>
+                        </td>
                     </tr>
                 `;
             });
         });
 
-        // Handle Add User
+        // Статус солих функц (Window объектод холбож товчноос дуудах боломжтой болгох)
+        window.toggleUserStatus = async (userId, currentStatus) => {
+            const newStatus = currentStatus === "ACTIVE" ? "DEACTIVE" : "ACTIVE";
+            try {
+                const userRef = doc(db, "users", userId);
+                await updateDoc(userRef, {
+                    status: newStatus,
+                    lastScanned: new Date().toLocaleString()
+                });
+            } catch (err) {
+                alert("Error updating status: " + err.message);
+            }
+        };
+
+        // Шинэ хэрэглэгч нэмэх хэсэг
         document.getElementById("addUserForm").addEventListener("submit", async (e) => {
             e.preventDefault();
             const id = document.getElementById("newUserId").value.trim();
@@ -94,7 +125,6 @@
                     lastScanned: "Never"
                 });
                 document.getElementById("addUserForm").reset();
-                alert("User added successfully!");
             } catch (err) {
                 alert("Error adding user: " + err.message);
             }
