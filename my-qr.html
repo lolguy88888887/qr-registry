@@ -3,63 +3,156 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My QR Pass</title>
+    <title>My QR Pass & Login</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- QRCode.js Library -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 </head>
 <body class="bg-gray-50 min-h-screen flex items-center justify-center p-6">
     <div class="max-w-md w-full bg-white rounded-xl shadow-md p-6 text-center">
-        <h1 class="text-2xl font-bold text-gray-800 mb-1">My QR Pass</h1>
-        <p class="text-sm text-gray-500 mb-6">Enter your User ID to generate your pass.</p>
+        
+        <!-- SECTION 1: LOGIN FORM (Shown when logged out) -->
+        <div id="loginSection">
+            <h1 class="text-2xl font-bold text-gray-800 mb-1">User Login</h1>
+            <p class="text-sm text-gray-500 mb-6">Enter your credentials to view your QR pass.</p>
 
-        <!-- Input Section -->
-        <div class="space-y-4 mb-6">
-            <input type="text" id="userIdInput" placeholder="Enter User ID..." class="w-full border rounded-lg px-4 py-2 text-center text-sm focus:ring-2 focus:ring-green-500 outline-none">
-            <button id="generateBtn" class="w-full bg-green-600 text-white py-2 rounded-lg font-semibold hover:bg-green-700 transition">Generate Pass</button>
+            <form id="loginForm" class="space-y-4 text-left">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">User ID / Username</label>
+                    <input type="text" id="loginId" placeholder="e.g. user123" required class="w-full border rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                    <input type="password" id="loginPassword" placeholder="Enter password" required class="w-full border rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                </div>
+                <button type="submit" class="w-full bg-blue-600 text-white py-2 rounded-lg font-semibold hover:bg-blue-700 transition">Log In</button>
+            </form>
+            <div id="loginMessage" class="mt-4 text-sm font-medium text-center"></div>
         </div>
 
-        <!-- QR Code Display Box -->
-        <div class="flex justify-center my-4">
-            <div id="qrcode" class="p-4 bg-white border rounded-xl shadow-inner inline-block"></div>
+        <!-- SECTION 2: QR PASS VIEW (Shown when logged in) -->
+        <div id="qrSection" class="hidden">
+            <h1 class="text-2xl font-bold text-gray-800 mb-1">My Digital Pass</h1>
+            <p id="userGreeting" class="text-sm text-gray-500 mb-4">Your dynamic entrance badge.</p>
+
+            <!-- QR Code Display Box -->
+            <div class="flex justify-center my-4">
+                <div id="qrcode" class="p-4 bg-white border rounded-xl shadow-inner inline-block"></div>
+            </div>
+
+            <div class="text-sm font-mono text-gray-600 mb-6">
+                ID: <span id="displayUserId" class="font-bold text-gray-800"></span>
+            </div>
+
+            <button id="logoutBtn" class="w-full bg-red-50 text-red-600 border border-red-200 py-2 rounded-lg font-semibold hover:bg-red-100 transition">Log Out</button>
         </div>
 
-        <div id="userInfo" class="text-sm font-mono text-gray-600 mb-6 hidden">
-            Active ID: <span id="displayUserId" class="font-bold text-gray-800"></span>
-        </div>
-
-        <div class="pt-4 border-t text-sm">
+        <div class="mt-6 pt-4 border-t text-sm">
             <a href="index.html" class="text-gray-500 hover:text-gray-700">&larr; Back to Dashboard</a>
         </div>
     </div>
 
-    <script>
+    <!-- Firebase & Logic -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
+        import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyDMJIliExwHKou9wyckX3_STlA1YIPNhI0",
+            authDomain: "qr-reg-aaadc.firebaseapp.com",
+            projectId: "qr-reg-aaadc",
+            storageBucket: "qr-reg-aaadc.firebasestorage.app",
+            messagingSenderId: "1062255210388",
+            appId: "1:1062255210388:web:5fb8d6fb47b3a3a029e981",
+            measurementId: "G-52EVTSYT57"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        const loginSection = document.getElementById("loginSection");
+        const qrSection = document.getElementById("qrSection");
+        const loginForm = document.getElementById("loginForm");
+        const loginMessage = document.getElementById("loginMessage");
         const qrcodeContainer = document.getElementById("qrcode");
-        const userInfo = document.getElementById("userInfo");
+        const userGreeting = document.getElementById("userGreeting");
         const displayUserId = document.getElementById("displayUserId");
+        const logoutBtn = document.getElementById("logoutBtn");
 
-        document.getElementById("generateBtn").addEventListener("click", () => {
-            const userId = document.getElementById("userIdInput").value.trim();
-            if (!userId) {
-                alert("Please enter a valid User ID.");
-                return;
-            }
-
-            // Clear previous QR code
+        // Helper to render QR code
+        function renderQR(text) {
             qrcodeContainer.innerHTML = "";
-            
-            // Generate new QR code
             new QRCode(qrcodeContainer, {
-                text: userId,
+                text: text,
                 width: 180,
                 height: 180,
                 colorDark: "#000000",
                 colorLight: "#ffffff",
                 correctLevel: QRCode.CorrectLevel.H
             });
+        }
 
-            displayUserId.textContent = userId;
-            userInfo.classList.remove("hidden");
+        // Check if already logged in during this session
+        const activeUser = sessionStorage.getItem("loggedInUser");
+        const activeName = sessionStorage.getItem("loggedInName");
+        if (activeUser) {
+            loginSection.classList.add("hidden");
+            qrSection.classList.remove("hidden");
+            userGreeting.textContent = `Welcome back, ${activeName || activeUser}!`;
+            displayUserId.textContent = activeUser;
+            renderQR(activeUser);
+        }
+
+        // Handle Login Submission
+        loginForm.addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const userId = document.getElementById("loginId").value.trim();
+            const password = document.getElementById("loginPassword").value.trim();
+
+            if (!userId || !password) return;
+
+            loginMessage.className = "mt-4 text-sm font-medium text-gray-600 text-center";
+            loginMessage.textContent = "Verifying...";
+
+            try {
+                const userRef = doc(db, "users", userId);
+                const docSnap = await getDoc(userRef);
+
+                if (docSnap.exists()) {
+                    const userData = docSnap.data();
+                    
+                    if (userData.password === password) {
+                        // Save session
+                        sessionStorage.setItem("loggedInUser", userId);
+                        sessionStorage.setItem("loggedInName", userData.name || userId);
+
+                        // Switch view to QR Pass
+                        loginSection.classList.add("hidden");
+                        qrSection.classList.remove("hidden");
+                        userGreeting.textContent = `Welcome, ${userData.name || userId}!`;
+                        displayUserId.textContent = userId;
+                        renderQR(userId);
+                    } else {
+                        loginMessage.className = "mt-4 text-sm font-medium text-red-600 text-center";
+                        loginMessage.textContent = "Incorrect password.";
+                    }
+                } else {
+                    loginMessage.className = "mt-4 text-sm font-medium text-red-600 text-center";
+                    loginMessage.textContent = "User ID not found.";
+                }
+            } catch (err) {
+                loginMessage.className = "mt-4 text-sm font-medium text-red-600 text-center";
+                loginMessage.textContent = "Error: " + err.message;
+            }
+        });
+
+        // Handle Logout
+        logoutBtn.addEventListener("click", () => {
+            sessionStorage.clear();
+            loginForm.reset();
+            loginMessage.textContent = "";
+            qrSection.classList.add("hidden");
+            loginSection.classList.remove("hidden");
         });
     </script>
 </body>
