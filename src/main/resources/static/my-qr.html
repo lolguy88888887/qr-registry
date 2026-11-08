@@ -2,111 +2,79 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>My Digital QR Pass</title>
-    <!-- Include qrcode.js library -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-    <style>
-        body { font-family: Arial, sans-serif; background: #f4f7f6; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-        .pass-card { background: white; width: 350px; padding: 30px; border-radius: 12px; box-shadow: 0 8px 20px rgba(0,0,0,0.15); text-align: center; }
-        h2 { color: #333; margin-bottom: 5px; }
-        .status-badge { display: inline-block; padding: 6px 14px; border-radius: 20px; font-weight: bold; font-size: 14px; margin: 15px 0; }
-        .active { background: #d4edda; color: #155724; }
-        .deactive { background: #f8d7da; color: #721c24; }
-        #qrcode { margin: 20px auto; display: flex; justify-content: center; }
-        select { width: 100%; padding: 10px; margin-bottom: 15px; font-size: 16px; border-radius: 6px; border: 1px solid #ccc; }
-        .user-id { font-family: monospace; color: #666; font-size: 15px; margin-top: 10px; }
-    </style>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QR Scanner</title>
+    <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body>
+<body class="bg-gray-50 min-h-screen flex items-center justify-center p-6">
+    <div class="max-w-md w-full bg-white rounded-xl shadow-md p-6 text-center">
+        <h1 class="text-2xl font-bold text-gray-800 mb-2">QR Code Scanner</h1>
+        <p class="text-sm text-gray-500 mb-6">Enter or scan a User ID to mark attendance.</p>
 
-    <div class="pass-card">
-        <h2>Digital QR Pass</h2>
-        <p style="color: #777; font-size: 14px;">Select your user profile to view your pass</p>
-        
-        <select id="userSelect" onchange="loadUserQR()">
-            <option value="">-- Choose User --</option>
-        </select>
+        <div class="space-y-4">
+            <input type="text" id="scanInput" placeholder="Scan or type User ID..." class="w-full border rounded-lg px-4 py-3 text-center text-lg font-mono focus:ring-2 focus:ring-blue-500 outline-none">
+            <button id="submitScan" class="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700">Process Scan</button>
+        </div>
 
-        <div id="userInfo" style="display: none;">
-            <div id="userName" style="font-size: 20px; font-weight: bold; color: #007bff; margin-top: 10px;"></div>
-            <div class="user-id" id="userIdDisplay"></div>
-            <div id="statusBadge" class="status-badge deactive">DEACTIVE</div>
-            
-            <!-- QR Code Box -->
-            <div id="qrcode"></div>
-            
-            <div style="font-size: 12px; color: #888; margin-top: 10px;">
-                Last Scanned: <span id="lastScannedDisplay">Never</span>
-            </div>
+        <div id="resultMessage" class="mt-4 text-sm font-medium"></div>
+
+        <div class="mt-6">
+            <a href="dashboard.html" class="text-blue-600 text-sm hover:underline">&larr; Back to Dashboard</a>
         </div>
     </div>
 
-    <script>
-        let usersList = [];
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
+        import { getFirestore, doc, getDoc, updateDoc } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
 
-        async function fetchUsersForDropdown() {
-            try {
-                let response = await fetch('/api/users');
-                usersList = await response.json();
-                let select = document.getElementById('userSelect');
-                select.innerHTML = '<option value="">-- Choose User --</option>';
-                
-                usersList.forEach(user => {
-                    let opt = document.createElement('option');
-                    opt.value = user.id;
-                    opt.textContent = user.name + " (" + user.id + ")";
-                    select.appendChild(opt);
-                });
-            } catch (e) {
-                console.error("Error loading users:", e);
-            }
-        }
-
-        function loadUserQR() {
-            let selectedId = document.getElementById('userSelect').value;
-            let infoDiv = document.getElementById('userInfo');
-            
-            if (!selectedId) {
-                infoDiv.style.display = 'none';
-                return;
-            }
-
-            let user = usersList.find(u => u.id === selectedId);
-            if (!user) return;
-
-            document.getElementById('userName').innerText = user.name;
-            document.getElementById('userIdDisplay').innerText = user.id;
-            
-            let badge = document.getElementById('statusBadge');
-            badge.className = "status-badge " + (user.status === 'ACTIVE' ? 'active' : 'deactive');
-            badge.innerText = user.status;
-
-            document.getElementById('lastScannedDisplay').innerText = user.lastScanned || 'Never';
-
-            // Render QR code dynamically
-            let qrContainer = document.getElementById('qrcode');
-            qrContainer.innerHTML = "";
-            new QRCode(qrContainer, {
-                text: user.id,
-                width: 180,
-                height: 180
-            });
-
-            infoDiv.style.display = 'block';
-        }
-
-        // Load users on startup and poll every 3 seconds to update status live if scanned
-        window.onload = function() {
-            fetchUsersForDropdown();
-            setInterval(async () => {
-                let response = await fetch('/api/users');
-                usersList = await response.json();
-                let selectedId = document.getElementById('userSelect').value;
-                if (selectedId) {
-                    loadUserQR(); // Refresh view if status changes
-                }
-            }, 3000);
+        const firebaseConfig = {
+            apiKey: "AIzaSyDMJIliExwHKou9wyckX3_STlA1YIPNhI0",
+            authDomain: "qr-reg-aaadc.firebaseapp.com",
+            projectId: "qr-reg-aaadc",
+            storageBucket: "qr-reg-aaadc.firebasestorage.app",
+            messagingSenderId: "1062255210388",
+            appId: "1:1062255210388:web:5fb8d6fb47b3a3a029e981",
+            measurementId: "G-52EVTSYT57"
         };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        const scanInput = document.getElementById("scanInput");
+        const submitBtn = document.getElementById("submitScan");
+        const msgDiv = document.getElementById("resultMessage");
+
+        async function handleScan() {
+            const userId = scanInput.value.trim();
+            if (!userId) return;
+
+            try {
+                const userRef = doc(db, "users", userId);
+                const docSnap = await getDoc(userRef);
+
+                if (docSnap.exists()) {
+                    const timestamp = new Date().toLocaleString();
+                    await updateDoc(userRef, {
+                        status: "ACTIVE",
+                        lastScanned: timestamp
+                    });
+                    msgDiv.className = "mt-4 text-sm font-medium text-green-600";
+                    msgDiv.textContent = `Success! User "${userId}" marked ACTIVE at ${timestamp}.`;
+                    scanInput.value = "";
+                } else {
+                    msgDiv.className = "mt-4 text-sm font-medium text-red-600";
+                    msgDiv.textContent = `Error: User ID "${userId}" not found in database.`;
+                }
+            } catch (err) {
+                msgDiv.className = "mt-4 text-sm font-medium text-red-600";
+                msgDiv.textContent = "Error processing scan: " + err.message;
+            }
+        }
+
+        submitBtn.addEventListener("click", handleScan);
+        scanInput.addEventListener("keypress", (e) => {
+            if (e.key === "Enter") handleScan();
+        });
     </script>
 </body>
 </html>
