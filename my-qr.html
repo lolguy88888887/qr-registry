@@ -3,78 +3,47 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>QR Scanner</title>
+    <title>My QR Pass</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- QRCode.js Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 </head>
 <body class="bg-gray-50 min-h-screen flex items-center justify-center p-6">
     <div class="max-w-md w-full bg-white rounded-xl shadow-md p-6 text-center">
-        <h1 class="text-2xl font-bold text-gray-800 mb-2">QR Code Scanner</h1>
-        <p class="text-sm text-gray-500 mb-6">Enter or scan a User ID to mark attendance.</p>
+        <h1 class="text-2xl font-bold text-gray-800 mb-1">My Digital Pass</h1>
+        <p id="userGreeting" class="text-sm text-gray-500 mb-4">Your dynamic entrance badge.</p>
 
-        <div class="space-y-4">
-            <input type="text" id="scanInput" placeholder="Scan or type User ID..." class="w-full border rounded-lg px-4 py-3 text-center text-lg font-mono focus:ring-2 focus:ring-blue-500 outline-none">
-            <button id="submitScan" class="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700">Process Scan</button>
+        <!-- QR Code Display Box -->
+        <div class="flex justify-center my-4">
+            <div id="qrcode" class="p-4 bg-white border rounded-xl shadow-inner inline-block"></div>
         </div>
 
-        <div id="resultMessage" class="mt-4 text-sm font-medium"></div>
+        <div id="userInfo" class="text-sm font-mono text-gray-600 mb-6 hidden">
+            ID: <span id="displayUserId" class="font-bold text-gray-800"></span>
+        </div>
 
-        <div class="mt-6">
-            <a href="dashboard.html" class="text-blue-600 text-sm hover:underline">&larr; Back to Dashboard</a>
+        <!-- Manual Input (Fallback if not logged in) -->
+        <div id="manualInputSection" class="space-y-4 mb-6">
+            <input type="text" id="userIdInput" placeholder="Enter your User ID..." class="w-full border rounded-lg px-4 py-2 text-center text-sm focus:ring-2 focus:ring-green-500 outline-none">
+            <button id="generateBtn" class="w-full bg-green-600 text-white py-2 rounded-lg font-semibold hover:bg-green-700 transition">Show My Pass</button>
+        </div>
+
+        <!-- Action Links -->
+        <div class="flex justify-between items-center pt-4 border-t text-sm">
+            <a href="index.html" class="text-gray-500 hover:text-gray-700">&larr; Dashboard</a>
+            <button id="logoutBtn" class="text-red-500 hover:underline hidden font-medium">Log Out</button>
         </div>
     </div>
 
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
-        import { getFirestore, doc, getDoc, updateDoc } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
+    <script>
+        const qrcodeContainer = document.getElementById("qrcode");
+        const greeting = document.getElementById("userGreeting");
+        const userInfo = document.getElementById("userInfo");
+        const displayUserId = document.getElementById("displayUserId");
+        const manualSection = document.getElementById("manualInputSection");
+        const logoutBtn = document.getElementById("logoutBtn");
 
-        const firebaseConfig = {
-            apiKey: "AIzaSyDMJIliExwHKou9wyckX3_STlA1YIPNhI0",
-            authDomain: "qr-reg-aaadc.firebaseapp.com",
-            projectId: "qr-reg-aaadc",
-            storageBucket: "qr-reg-aaadc.firebasestorage.app",
-            messagingSenderId: "1062255210388",
-            appId: "1:1062255210388:web:5fb8d6fb47b3a3a029e981",
-            measurementId: "G-52EVTSYT57"
-        };
-
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
-
-        const scanInput = document.getElementById("scanInput");
-        const submitBtn = document.getElementById("submitScan");
-        const msgDiv = document.getElementById("resultMessage");
-
-        async function handleScan() {
-            const userId = scanInput.value.trim();
-            if (!userId) return;
-
-            try {
-                const userRef = doc(db, "users", userId);
-                const docSnap = await getDoc(userRef);
-
-                if (docSnap.exists()) {
-                    const timestamp = new Date().toLocaleString();
-                    await updateDoc(userRef, {
-                        status: "ACTIVE",
-                        lastScanned: timestamp
-                    });
-                    msgDiv.className = "mt-4 text-sm font-medium text-green-600";
-                    msgDiv.textContent = `Success! User "${userId}" marked ACTIVE at ${timestamp}.`;
-                    scanInput.value = "";
-                } else {
-                    msgDiv.className = "mt-4 text-sm font-medium text-red-600";
-                    msgDiv.textContent = `Error: User ID "${userId}" not found in database.`;
-                }
-            } catch (err) {
-                msgDiv.className = "mt-4 text-sm font-medium text-red-600";
-                msgDiv.textContent = "Error processing scan: " + err.message;
-            }
-        }
-
-        submitBtn.addEventListener("click", handleScan);
-        scanInput.addEventListener("keypress", (e) => {
-            if (e.key === "Enter") handleScan();
-        });
-    </script>
-</body>
-</html>
+        // Render QR Code helper function
+        function renderQR(text) {
+            qrcodeContainer.innerHTML = "";
+            new QRCode(qrcodeContainer
