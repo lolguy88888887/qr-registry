@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>QR System Dashboard</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; background: #f4f7f6; }
+        h2 { color: #333; }
+        .card { background: white; padding: 20px; margin-bottom: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        input, button { padding: 10px; margin: 5px 0; font-size: 14px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th, td { padding: 12px; border: 1px solid #ddd; text-align: left; vertical-align: middle; }
+        th { background-color: #007bff; color: white; }
+        .badge-active { color: green; font-weight: bold; }
+        .badge-deactive { color: red; font-weight: bold; }
+        .qr-container { display: inline-block; background: white; padding: 5px; border: 1px solid #ccc; }
+        .download-btn { background: #28a745; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; }
+        .download-btn:hover { background: #218838; }
+    </style>
+</head>
+<body>
+
+    <h2>QR System & User Management Dashboard</h2>
+
+    <div class="card">
+        <h3>Create New User</h3>
+        <form id="userForm">
+            <input type="text" id="userName" placeholder="User Name" required>
+            <button type="submit">Add User & Generate QR</button>
+        </form>
+    </div>
+
+    <div class="card">
+        <h3>Registered Users & QR Codes</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>User ID</th>
+                    <th>Name</th>
+                    <th>Status</th>
+                    <th>Last Scanned At</th>
+                    <th>QR Code</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody id="userTableBody">
+                <!-- Dynamic rows will load here -->
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        async function fetchUsers() {
+            try {
+                let response = await fetch('/api/users');
+                let users = await response.json();
+                let tbody = document.getElementById('userTableBody');
+                tbody.innerHTML = '';
+                
+                users.forEach(user => {
+                    let row = document.createElement('tr');
+                    let statusClass = user.status === 'ACTIVE' ? 'badge-active' : 'badge-deactive';
+                    let qrCellId = `qr-${user.id}`;
+                    
+                    row.innerHTML = `
+                        <td>${user.id}</td>
+                        <td>${user.name}</td>
+                        <td><span class="${statusClass}">${user.status}</span></td>
+                        <td>${user.lastScanned || 'Never'}</td>
+                        <td><div id="${qrCellId}" class="qr-container"></div></td>
+                        <td><button class="download-btn" onclick="downloadQR('${user.id}', '${user.name}')">Download QR</button></td>
+                    `;
+                    tbody.appendChild(row);
+
+                    new QRCode(document.getElementById(qrCellId), {
+                        text: user.id,
+                        width: 80,
+                        height: 80
+                    });
+                });
+            } catch (err) {
+                console.error("Error fetching users:", err);
+            }
+        }
+
+        function downloadQR(userId, userName) {
+            let qrContainer = document.getElementById(`qr-${userId}`);
+            let canvas = qrContainer.querySelector('canvas');
+            if (!canvas) {
+                alert("QR code not ready yet!");
+                return;
+            }
+            let imageURL = canvas.toDataURL("image/png");
+            let link = document.createElement('a');
+            link.href = imageURL;
+            link.download = `${userName}_${userId}_QR.png`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        document.getElementById('userForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            let nameInput = document.getElementById('userName');
+            let name = nameInput.value.trim();
+
+            if (!name) return;
+
+            try {
+                let res = await fetch('/api/users', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: name })
+                });
+
+                if (res.ok) {
+                    nameInput.value = '';
+                    fetchUsers();
+                } else {
+                    alert("Failed to add user on server.");
+                }
+            } catch (err) {
+                console.error("Network error:", err);
+            }
+        });
+
+        fetchUsers();
+        setInterval(fetchUsers, 3000);
+    </script>
+</body>
+</html>

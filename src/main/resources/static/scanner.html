@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>QR Scanner Terminal</title>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <style>
+        body { font-family: Arial, sans-serif; background: #f4f7f6; text-align: center; padding: 20px; }
+        .card { background: white; max-width: 480px; margin: 0 auto 20px auto; padding: 25px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        #reader { width: 100%; margin-top: 15px; }
+        input { width: 75%; padding: 10px; font-size: 16px; margin-top: 10px; border: 1px solid #ccc; border-radius: 4px; }
+        button { padding: 10px 20px; font-size: 16px; margin-top: 10px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        
+        #scanPopup {
+            display: none; position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+            background: #28a745; color: white; padding: 15px 30px; border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3); font-size: 18px; font-weight: bold; z-index: 1000;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="scanPopup">✅ Scan Successful!</div>
+
+    <div class="card">
+        <h2>Manual ID Entry</h2>
+        <input type="text" id="manualInput" placeholder="Enter User ID (e.g. USR-XXXXX)" autocomplete="off">
+        <br>
+        <button onclick="submitManualScan()">Submit Manual Scan</button>
+    </div>
+
+    <div class="card">
+        <h2>Live Camera Scanner</h2>
+        <div id="reader"></div>
+    </div>
+
+    <script>
+        let isProcessing = false;
+
+        async function processScan(scannedText) {
+            if (isProcessing) return;
+            isProcessing = true;
+
+            let cleanId = scannedText.trim();
+            console.log("Sending scan request for ID:", cleanId);
+
+            try {
+                let response = await fetch('/api/users/scan', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: cleanId })
+                });
+
+                let result = await response.json();
+                if (response.ok && result && result.id) {
+                    showPopup(result.id);
+                } else {
+                    alert("User ID not found in system: " + cleanId);
+                }
+            } catch (err) {
+                console.error("Scan error:", err);
+            }
+
+            setTimeout(() => { isProcessing = false; }, 2000);
+        }
+
+        function submitManualScan() {
+            let inputField = document.getElementById('manualInput');
+            let val = inputField.value.trim();
+            if (!val) {
+                alert("Please enter a User ID first!");
+                return;
+            }
+            processScan(val);
+            inputField.value = '';
+        }
+
+        function showPopup(scannedText) {
+            let popup = document.getElementById('scanPopup');
+            popup.innerText = "✅ Activated: " + scannedText;
+            popup.style.display = 'block';
+
+            setTimeout(() => {
+                popup.style.display = 'none';
+            }, 3500);
+        }
+
+        window.onload = function() {
+            try {
+                let html5QrcodeScanner = new Html5QrcodeScanner("reader", { 
+                    fps: 10, 
+                    qrbox: 250,
+                    rememberLastUsedCamera: true
+                });
+                html5QrcodeScanner.render((decodedText) => {
+                    processScan(decodedText);
+                });
+            } catch (e) {
+                console.log("Camera scanner not initialized.");
+            }
+        };
+    </script>
+</body>
+</html>
