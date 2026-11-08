@@ -10,8 +10,14 @@
 </head>
 <body class="bg-gray-50 min-h-screen flex items-center justify-center p-6">
     <div class="max-w-md w-full bg-white rounded-xl shadow-md p-6 text-center">
-        <h1 class="text-2xl font-bold text-gray-800 mb-1">My Digital Pass</h1>
-        <p id="userGreeting" class="text-sm text-gray-500 mb-4">Your dynamic entrance badge.</p>
+        <h1 class="text-2xl font-bold text-gray-800 mb-1">My QR Pass</h1>
+        <p class="text-sm text-gray-500 mb-6">Enter your User ID to generate your pass.</p>
+
+        <!-- Input Section -->
+        <div class="space-y-4 mb-6">
+            <input type="text" id="userIdInput" placeholder="Enter User ID..." class="w-full border rounded-lg px-4 py-2 text-center text-sm focus:ring-2 focus:ring-green-500 outline-none">
+            <button id="generateBtn" class="w-full bg-green-600 text-white py-2 rounded-lg font-semibold hover:bg-green-700 transition">Generate Pass</button>
+        </div>
 
         <!-- QR Code Display Box -->
         <div class="flex justify-center my-4">
@@ -19,78 +25,41 @@
         </div>
 
         <div id="userInfo" class="text-sm font-mono text-gray-600 mb-6 hidden">
-            ID: <span id="displayUserId" class="font-bold text-gray-800"></span>
+            Active ID: <span id="displayUserId" class="font-bold text-gray-800"></span>
         </div>
 
-        <!-- Manual Input (Fallback if not logged in) -->
-        <div id="manualInputSection" class="space-y-4 mb-6">
-            <!-- Login Prompt Link -->
-            <div class="p-3 bg-blue-50 border border-blue-100 rounded-lg text-sm text-blue-800 mb-4">
-                Have an account? <a href="login.html" class="font-bold underline hover:text-blue-900">Log in here</a>
-            </div>
-
-            <input type="text" id="userIdInput" placeholder="Or enter User ID manually..." class="w-full border rounded-lg px-4 py-2 text-center text-sm focus:ring-2 focus:ring-green-500 outline-none">
-            <button id="generateBtn" class="w-full bg-green-600 text-white py-2 rounded-lg font-semibold hover:bg-green-700 transition">Show Pass</button>
-        </div>
-
-        <!-- Action Links -->
-        <div class="flex justify-between items-center pt-4 border-t text-sm">
-            <a href="index.html" class="text-gray-500 hover:text-gray-700">&larr; Dashboard</a>
-            <button id="logoutBtn" class="text-red-500 hover:underline hidden font-medium">Log Out</button>
+        <div class="pt-4 border-t text-sm">
+            <a href="index.html" class="text-gray-500 hover:text-gray-700">&larr; Back to Dashboard</a>
         </div>
     </div>
 
     <script>
         const qrcodeContainer = document.getElementById("qrcode");
-        const greeting = document.getElementById("userGreeting");
         const userInfo = document.getElementById("userInfo");
         const displayUserId = document.getElementById("displayUserId");
-        const manualSection = document.getElementById("manualInputSection");
-        const logoutBtn = document.getElementById("logoutBtn");
 
-        // Render QR Code helper function
-        function renderQR(text) {
+        document.getElementById("generateBtn").addEventListener("click", () => {
+            const userId = document.getElementById("userIdInput").value.trim();
+            if (!userId) {
+                alert("Please enter a valid User ID.");
+                return;
+            }
+
+            // Clear previous QR code
             qrcodeContainer.innerHTML = "";
+            
+            // Generate new QR code
             new QRCode(qrcodeContainer, {
-                text: text,
-                width: 200,
-                height: 200,
+                text: userId,
+                width: 180,
+                height: 180,
                 colorDark: "#000000",
                 colorLight: "#ffffff",
                 correctLevel: QRCode.CorrectLevel.H
             });
-        }
 
-        // Check if user is logged in from session
-        const loggedInUser = sessionStorage.getItem("loggedInUser");
-        const loggedInName = sessionStorage.getItem("loggedInName");
-
-        if (loggedInUser) {
-            // Auto-load pass for logged-in user
-            greeting.textContent = `Welcome, ${loggedInName || loggedInUser}!`;
-            displayUserId.textContent = loggedInUser;
+            displayUserId.textContent = userId;
             userInfo.classList.remove("hidden");
-            manualSection.classList.add("hidden"); // Hide manual input/login prompt when logged in
-            logoutBtn.classList.remove("hidden");
-            renderQR(loggedInUser);
-        }
-
-        // Manual Generation Listener
-        document.getElementById("generateBtn").addEventListener("click", () => {
-            const idVal = document.getElementById("userIdInput").value.trim();
-            if (!idVal) {
-                alert("Please enter a User ID.");
-                return;
-            }
-            displayUserId.textContent = idVal;
-            userInfo.classList.remove("hidden");
-            renderQR(idVal);
-        });
-
-        // Log out handler
-        logoutBtn.addEventListener("click", () => {
-            sessionStorage.clear();
-            window.location.href = "login.html";
         });
     </script>
 </body>
