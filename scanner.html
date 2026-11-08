@@ -3,54 +3,99 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My QR Pass</title>
+    <title>QR Scanner</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- QRCode.js Library -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <!-- Include Html5Qrcode Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
 </head>
 <body class="bg-gray-50 min-h-screen flex items-center justify-center p-6">
     <div class="max-w-md w-full bg-white rounded-xl shadow-md p-6 text-center">
-        <h1 class="text-2xl font-bold text-gray-800 mb-2">My Digital QR Pass</h1>
-        <p class="text-sm text-gray-500 mb-6">Enter your User ID to generate your personal badge.</p>
+        <h1 class="text-2xl font-bold text-gray-800 mb-2">QR Code Scanner</h1>
+        <p class="text-sm text-gray-500 mb-4">Point your camera at a QR code or type the User ID.</p>
 
-        <div class="space-y-4 mb-6">
-            <input type="text" id="userIdInput" placeholder="Enter your User ID..." class="w-full border rounded-lg px-4 py-2 text-center text-sm focus:ring-2 focus:ring-green-500 outline-none">
-            <button id="generateBtn" class="w-full bg-green-600 text-white py-2 rounded-lg font-semibold hover:bg-green-700">Generate Pass</button>
+        <!-- Camera Viewfinder Box -->
+        <div id="reader" class="w-full mb-4 overflow-hidden rounded-lg border"></div>
+
+        <div class="space-y-4">
+            <input type="text" id="scanInput" placeholder="Or type User ID manually..." class="w-full border rounded-lg px-4 py-2 text-center text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+            <button id="submitScan" class="w-full bg-blue-600 text-white py-2 rounded-lg font-semibold hover:bg-blue-700">Submit ID Manually</button>
         </div>
 
-        <!-- QR Code Container -->
-        <div class="flex justify-center my-4">
-            <div id="qrcode" class="p-4 bg-white border rounded-lg shadow-inner inline-block"></div>
-        </div>
+        <div id="resultMessage" class="mt-4 text-sm font-medium"></div>
 
         <div class="mt-6">
-            <a href="dashboard.html" class="text-green-600 text-sm hover:underline">&larr; Back to Dashboard</a>
+            <a href="index.html" class="text-blue-600 text-sm hover:underline">&larr; Back to Dashboard</a>
         </div>
     </div>
 
-    <script>
-        const qrcodeContainer = document.getElementById("qrcode");
-        let qrCodeInstance = null;
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
+        import { getFirestore, doc, getDoc, updateDoc } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
 
-        document.getElementById("generateBtn").addEventListener("click", () => {
-            const userId = document.getElementById("userIdInput").value.trim();
-            if (!userId) {
-                alert("Please enter a valid User ID.");
-                return;
+        const firebaseConfig = {
+            apiKey: "AIzaSyDMJIliExwHKou9wyckX3_STlA1YIPNhI0",
+            authDomain: "qr-reg-aaadc.firebaseapp.com",
+            projectId: "qr-reg-aaadc",
+            storageBucket: "qr-reg-aaadc.firebasestorage.app",
+            messagingSenderId: "1062255210388",
+            appId: "1:1062255210388:web:5fb8d6fb47b3a3a029e981",
+            measurementId: "G-52EVTSYT57"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        const msgDiv = document.getElementById("resultMessage");
+
+        // Function to process the user ID in Firebase
+        async function processUserScan(userId) {
+            userId = userId.trim();
+            if (!userId) return;
+
+            try {
+                const userRef = doc(db, "users", userId);
+                const docSnap = await getDoc(userRef);
+
+                if (docSnap.exists()) {
+                    const timestamp = new Date().toLocaleString();
+                    await updateDoc(userRef, {
+                        status: "ACTIVE",
+                        lastScanned: timestamp
+                    });
+                    msgDiv.className = "mt-4 text-sm font-medium text-green-600";
+                    msgDiv.textContent = `Success! User "${userId}" marked ACTIVE.`;
+                } else {
+                    msgDiv.className = "mt-4 text-sm font-medium text-red-600";
+                    msgDiv.textContent = `Error: User ID "${userId}" not found in database.`;
+                }
+            } catch (err) {
+                msgDiv.className = "mt-4 text-sm font-medium text-red-600";
+                msgDiv.textContent = "Error: " + err.message;
             }
+        }
 
-            // Clear previous QR code if any
-            qrcodeContainer.innerHTML = "";
-            
-            // Generate new QR code
-            qrCodeInstance = new QRCode(qrcodeContainer, {
-                text: userId,
-                width: 180,
-                height: 180,
-                colorDark: "#000000",
-                colorLight: "#ffffff",
-                correctLevel: QRCode.CorrectLevel.H
-            });
+        // Manual Input Listeners
+        document.getElementById("submitScan").addEventListener("click", () => {
+            const val = document.getElementById("scanInput").value;
+            processUserScan(val);
+        });
+
+        // Start Live Camera Scanner
+        const html5QrCode = new Html5Qrcode("reader");
+        html5QrCode.start(
+            { facingMode: "environment" }, // Uses back camera on phones, webcam on laptops
+            { fps: 10, qrbox: 250 },
+            (decodedText) => {
+                // Successfully scanned a QR code!
+                processUserScan(decodedText);
+            },
+            (errorMessage) => {
+                // Ignore routine scanning errors while searching for a code
+            }
+        ).catch((err) => {
+            console.warn("Camera initialization failed:", err);
+            msgDiv.className = "mt-4 text-sm font-medium text-orange-500";
+            msgDiv.textContent = "Camera access denied or unavailable. Use manual input below.";
         });
     </script>
 </body>
