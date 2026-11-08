@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>QR Scanner - Camera Switcher</title>
+    <title>QR Scanner with Sound</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
 </head>
@@ -58,6 +58,27 @@
         let html5QrCode = null;
         let isProcessing = false;
 
+        // Beep дуу тоглуулах функц (Ямар нэгэн MP3 файл шаардлагагүй)
+        function playSuccessBeep() {
+            try {
+                const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const oscillator = audioCtx.createOscillator();
+                const gainNode = audioCtx.createGain();
+
+                oscillator.type = "sine";
+                oscillator.frequency.setValueAtTime(800, audioCtx.currentTime); // Дууны өндөр давтамж
+                gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime); // Дууны чанга яригч түвшин
+
+                oscillator.connect(gainNode);
+                gainNode.connect(audioCtx.destination);
+
+                oscillator.start();
+                oscillator.stop(audioCtx.currentTime + 0.15); // 0.15 секунд үргэлжлэнэ
+            } catch (e) {
+                console.log("Audio context blocked or unsupported", e);
+            }
+        }
+
         async function processUserScan(userId) {
             userId = userId.trim();
             if (!userId || isProcessing) return;
@@ -73,6 +94,10 @@
                         status: "ACTIVE",
                         lastScanned: timestamp
                     });
+                    
+                    // Амжилттай уншигдахад дуу гаргана
+                    playSuccessBeep();
+
                     msgDiv.className = "mt-4 text-sm font-medium text-green-600";
                     msgDiv.textContent = `Success! User "${userId}" marked ACTIVE.`;
                 } else {
@@ -83,7 +108,7 @@
                 msgDiv.className = "mt-4 text-sm font-medium text-red-600";
                 msgDiv.textContent = "Error: " + err.message;
             } finally {
-                setTimeout(() => { isProcessing = false; }, 2000);
+                setTimeout(() => { isProcessing = false; }, 2500);
             }
         }
 
@@ -96,7 +121,6 @@
             if (e.key === "Enter") processUserScan(e.target.value);
         });
 
-        // Start Scanner with selected Camera ID
         function startScanner(cameraId) {
             if (html5QrCode && html5QrCode.isScanning) {
                 html5QrCode.stop().then(() => {
@@ -122,7 +146,6 @@
             });
         }
 
-        // Get list of available cameras and populate dropdown
         Html5Qrcode.getCameras().then(devices => {
             if (devices && devices.length) {
                 cameraSelect.innerHTML = "";
@@ -133,10 +156,8 @@
                     cameraSelect.appendChild(option);
                 });
 
-                // Start with the first available camera by default
                 startScanner(devices[0].id);
 
-                // Change camera when user selects another from dropdown
                 cameraSelect.addEventListener("change", (e) => {
                     startScanner(e.target.value);
                 });
