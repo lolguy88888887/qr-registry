@@ -3,19 +3,27 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>QR Scanner</title>
+    <title>QR Scanner - Camera Switcher</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Include Html5Qrcode Library -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
 </head>
 <body class="bg-gray-50 min-h-screen flex items-center justify-center p-6">
     <div class="max-w-md w-full bg-white rounded-xl shadow-md p-6 text-center">
         <h1 class="text-2xl font-bold text-gray-800 mb-2">QR Code Scanner</h1>
-        <p class="text-sm text-gray-500 mb-4">Point your camera at a QR code or type the User ID.</p>
+        <p class="text-sm text-gray-500 mb-4">Select your camera source below.</p>
+
+        <!-- Camera Selector Dropdown -->
+        <div class="mb-4">
+            <label class="block text-xs font-semibold text-gray-600 mb-1 text-left">Choose Camera:</label>
+            <select id="cameraSelect" class="w-full border rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none">
+                <option value="">-- Detect available cameras --</option>
+            </select>
+        </div>
 
         <!-- Camera Viewfinder Box -->
-        <div id="reader" class="w-full mb-4 overflow-hidden rounded-lg border"></div>
+        <div id="reader" class="w-full mb-4 overflow-hidden rounded-lg border bg-black" style="min-height: 250px;"></div>
 
+        <!-- Manual Input Alternative -->
         <div class="space-y-4">
             <input type="text" id="scanInput" placeholder="Or type User ID manually..." class="w-full border rounded-lg px-4 py-2 text-center text-sm focus:ring-2 focus:ring-blue-500 outline-none">
             <button id="submitScan" class="w-full bg-blue-600 text-white py-2 rounded-lg font-semibold hover:bg-blue-700">Submit ID Manually</button>
@@ -46,11 +54,14 @@
         const db = getFirestore(app);
 
         const msgDiv = document.getElementById("resultMessage");
+        const cameraSelect = document.getElementById("cameraSelect");
+        let html5QrCode = null;
+        let isProcessing = false;
 
-        // Function to process the user ID in Firebase
         async function processUserScan(userId) {
             userId = userId.trim();
-            if (!userId) return;
+            if (!userId || isProcessing) return;
+            isProcessing = true;
 
             try {
                 const userRef = doc(db, "users", userId);
@@ -66,36 +77,76 @@
                     msgDiv.textContent = `Success! User "${userId}" marked ACTIVE.`;
                 } else {
                     msgDiv.className = "mt-4 text-sm font-medium text-red-600";
-                    msgDiv.textContent = `Error: User ID "${userId}" not found in database.`;
+                    msgDiv.textContent = `Error: User ID "${userId}" not found.`;
                 }
             } catch (err) {
                 msgDiv.className = "mt-4 text-sm font-medium text-red-600";
                 msgDiv.textContent = "Error: " + err.message;
+            } finally {
+                setTimeout(() => { isProcessing = false; }, 2000);
             }
         }
 
-        // Manual Input Listeners
+        // Manual buttons
         document.getElementById("submitScan").addEventListener("click", () => {
-            const val = document.getElementById("scanInput").value;
-            processUserScan(val);
+            processUserScan(document.getElementById("scanInput").value);
         });
 
-        // Start Live Camera Scanner
-        const html5QrCode = new Html5Qrcode("reader");
-        html5QrCode.start(
-            { facingMode: "environment" }, // Uses back camera on phones, webcam on laptops
-            { fps: 10, qrbox: 250 },
-            (decodedText) => {
-                // Successfully scanned a QR code!
-                processUserScan(decodedText);
-            },
-            (errorMessage) => {
-                // Ignore routine scanning errors while searching for a code
+        document.getElementById("scanInput").addEventListener("keypress", (e) => {
+            if (e.key === "Enter") processUserScan(e.target.value);
+        });
+
+        // Start Scanner with selected Camera ID
+        function startScanner(cameraId) {
+            if (html5QrCode && html5QrCode.isScanning) {
+                html5QrCode.stop().then(() => {
+                    initCamera(cameraId);
+                }).catch(err => console.log(err));
+            } else {
+                initCamera(cameraId);
             }
-        ).catch((err) => {
-            console.warn("Camera initialization failed:", err);
-            msgDiv.className = "mt-4 text-sm font-medium text-orange-500";
-            msgDiv.textContent = "Camera access denied or unavailable. Use manual input below.";
+        }
+
+        function initCamera(cameraId) {
+            html5QrCode = new Html5Qrcode("reader");
+            html5QrCode.start(
+                cameraId,
+                { fps: 10, qrbox: 250 },
+                (decodedText) => {
+                    processUserScan(decodedText);
+                },
+                (errorMessage) => {}
+            ).catch(err => {
+                msgDiv.className = "mt-4 text-sm font-medium text-orange-500";
+                msgDiv.textContent = "Could not start selected camera: " + err;
+            });
+        }
+
+        // Get list of available cameras and populate dropdown
+        Html5Qrcode.getCameras().then(devices => {
+            if (devices && devices.length) {
+                cameraSelect.innerHTML = "";
+                devices.forEach(device => {
+                    const option = document.createElement("option");
+                    option.value = device.id;
+                    option.text = device.label || `Camera ${cameraSelect.length + 1}`;
+                    cameraSelect.appendChild(option);
+                });
+
+                // Start with the first available camera by default
+                startScanner(devices[0].id);
+
+                // Change camera when user selects another from dropdown
+                cameraSelect.addEventListener("change", (e) => {
+                    startScanner(e.target.value);
+                });
+            } else {
+                msgDiv.className = "mt-4 text-sm font-medium text-red-500";
+                msgDiv.textContent = "No cameras found on this device.";
+            }
+        }).catch(err => {
+            msgDiv.className = "mt-4 text-sm font-medium text-red-500";
+            msgDiv.textContent = "Camera permission error: " + err;
         });
     </script>
 </body>
