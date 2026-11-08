@@ -2,104 +2,56 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>QR Scanner Terminal</title>
-    <script src="https://unpkg.com/html5-qrcode"></script>
-    <style>
-        body { font-family: Arial, sans-serif; background: #f4f7f6; text-align: center; padding: 20px; }
-        .card { background: white; max-width: 480px; margin: 0 auto 20px auto; padding: 25px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
-        #reader { width: 100%; margin-top: 15px; }
-        input { width: 75%; padding: 10px; font-size: 16px; margin-top: 10px; border: 1px solid #ccc; border-radius: 4px; }
-        button { padding: 10px 20px; font-size: 16px; margin-top: 10px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
-        button:hover { background: #0056b3; }
-        
-        #scanPopup {
-            display: none; position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
-            background: #28a745; color: white; padding: 15px 30px; border-radius: 8px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3); font-size: 18px; font-weight: bold; z-index: 1000;
-        }
-    </style>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My QR Pass</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- QRCode.js Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 </head>
-<body>
+<body class="bg-gray-50 min-h-screen flex items-center justify-center p-6">
+    <div class="max-w-md w-full bg-white rounded-xl shadow-md p-6 text-center">
+        <h1 class="text-2xl font-bold text-gray-800 mb-2">My Digital QR Pass</h1>
+        <p class="text-sm text-gray-500 mb-6">Enter your User ID to generate your personal badge.</p>
 
-    <div id="scanPopup">✅ Scan Successful!</div>
+        <div class="space-y-4 mb-6">
+            <input type="text" id="userIdInput" placeholder="Enter your User ID..." class="w-full border rounded-lg px-4 py-2 text-center text-sm focus:ring-2 focus:ring-green-500 outline-none">
+            <button id="generateBtn" class="w-full bg-green-600 text-white py-2 rounded-lg font-semibold hover:bg-green-700">Generate Pass</button>
+        </div>
 
-    <div class="card">
-        <h2>Manual ID Entry</h2>
-        <input type="text" id="manualInput" placeholder="Enter User ID (e.g. USR-XXXXX)" autocomplete="off">
-        <br>
-        <button onclick="submitManualScan()">Submit Manual Scan</button>
-    </div>
+        <!-- QR Code Container -->
+        <div class="flex justify-center my-4">
+            <div id="qrcode" class="p-4 bg-white border rounded-lg shadow-inner inline-block"></div>
+        </div>
 
-    <div class="card">
-        <h2>Live Camera Scanner</h2>
-        <div id="reader"></div>
+        <div class="mt-6">
+            <a href="dashboard.html" class="text-green-600 text-sm hover:underline">&larr; Back to Dashboard</a>
+        </div>
     </div>
 
     <script>
-        let isProcessing = false;
+        const qrcodeContainer = document.getElementById("qrcode");
+        let qrCodeInstance = null;
 
-        async function processScan(scannedText) {
-            if (isProcessing) return;
-            isProcessing = true;
-
-            let cleanId = scannedText.trim();
-            console.log("Sending scan request for ID:", cleanId);
-
-            try {
-                let response = await fetch('/api/users/scan', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ id: cleanId })
-                });
-
-                let result = await response.json();
-                if (response.ok && result && result.id) {
-                    showPopup(result.id);
-                } else {
-                    alert("User ID not found in system: " + cleanId);
-                }
-            } catch (err) {
-                console.error("Scan error:", err);
-            }
-
-            setTimeout(() => { isProcessing = false; }, 2000);
-        }
-
-        function submitManualScan() {
-            let inputField = document.getElementById('manualInput');
-            let val = inputField.value.trim();
-            if (!val) {
-                alert("Please enter a User ID first!");
+        document.getElementById("generateBtn").addEventListener("click", () => {
+            const userId = document.getElementById("userIdInput").value.trim();
+            if (!userId) {
+                alert("Please enter a valid User ID.");
                 return;
             }
-            processScan(val);
-            inputField.value = '';
-        }
 
-        function showPopup(scannedText) {
-            let popup = document.getElementById('scanPopup');
-            popup.innerText = "✅ Activated: " + scannedText;
-            popup.style.display = 'block';
-
-            setTimeout(() => {
-                popup.style.display = 'none';
-            }, 3500);
-        }
-
-        window.onload = function() {
-            try {
-                let html5QrcodeScanner = new Html5QrcodeScanner("reader", { 
-                    fps: 10, 
-                    qrbox: 250,
-                    rememberLastUsedCamera: true
-                });
-                html5QrcodeScanner.render((decodedText) => {
-                    processScan(decodedText);
-                });
-            } catch (e) {
-                console.log("Camera scanner not initialized.");
-            }
-        };
+            // Clear previous QR code if any
+            qrcodeContainer.innerHTML = "";
+            
+            // Generate new QR code
+            qrCodeInstance = new QRCode(qrcodeContainer, {
+                text: userId,
+                width: 180,
+                height: 180,
+                colorDark: "#000000",
+                colorLight: "#ffffff",
+                correctLevel: QRCode.CorrectLevel.H
+            });
+        });
     </script>
 </body>
 </html>
