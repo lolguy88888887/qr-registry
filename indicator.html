@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Status Indicator Display</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body id="bodyBg" class="bg-blue-600 min-h-screen flex flex-col items-center justify-center text-center p-6 transition-colors duration-300">
+
+    <!-- FULL SCREEN STATUS CONTENT -->
+    <div class="text-white">
+        <h1 id="statusTitle" class="text-6xl font-extrabold mb-4 tracking-wide">READY TO SCAN</h1>
+        <p id="statusMessage" class="text-2xl opacity-90">Waiting for attendance check-in...</p>
+    </div>
+
+    <!-- Back to Dashboard Link -->
+    <div class="absolute bottom-6 left-6">
+        <a href="index.html" class="bg-white/20 hover:bg-white/30 text-white px-4 py-2 rounded-lg text-sm transition font-medium">&larr; Back to Dashboard</a>
+    </div>
+
+    <!-- Firebase SDK & Real-time Listener Logic -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
+        import { getFirestore, collection, onSnapshot } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyDMJIliExwHKou9wyckX3_STlA1YIPNhI0",
+            authDomain: "qr-reg-aaadc.firebaseapp.com",
+            projectId: "qr-reg-aaadc",
+            storageBucket: "qr-reg-aaadc.firebasestorage.app",
+            messagingSenderId: "1062255210388",
+            appId: "1:1062255210388:web:5fb8d6fb47b3a3a029e981",
+            measurementId: "G-52EVTSYT57"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        const bodyBg = document.getElementById("bodyBg");
+        const statusTitle = document.getElementById("statusTitle");
+        const statusMessage = document.getElementById("statusMessage");
+
+        let resetTimer = null;
+
+        // Web Audio API Beep Sound
+        function playSound(isSuccess) {
+            try {
+                const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const oscillator = audioCtx.createOscillator();
+                const gainNode = audioCtx.createGain();
+
+                oscillator.type = "sine";
+                oscillator.frequency.setValueAtTime(isSuccess ? 800 : 300, audioCtx.currentTime);
+                gainNode.gain.setValueAtTime(0.15, audioCtx.currentTime);
+
+                oscillator.connect(gainNode);
+                gainNode.connect(audioCtx.destination);
+
+                oscillator.start();
+                oscillator.stop(audioCtx.currentTime + (isSuccess ? 0.15 : 0.4));
+            } catch (e) {
+                console.log("Audio play blocked", e);
+            }
+        }
+
+        // Change Indicator State
+        function setIndicator(type, title, message) {
+            bodyBg.classList.remove("bg-blue-600", "bg-green-600", "bg-red-600");
+            
+            if (type === 'SUCCESS') {
+                bodyBg.classList.add("bg-green-600");
+                playSound(true);
+            } else if (type === 'ERROR') {
+                bodyBg.classList.add("bg-red-600");
+                playSound(false);
+            } else {
+                bodyBg.classList.add("bg-blue-600");
+            }
+
+            statusTitle.textContent = title;
+            statusMessage.textContent = message;
+
+            if (resetTimer) clearTimeout(resetTimer);
+
+            // Automatically return to BLUE (Idle) after 3 seconds
+            if (type !== 'IDLE') {
+                resetTimer = setTimeout(() => {
+                    setIndicator('IDLE', 'READY TO SCAN', 'Waiting for attendance check-in...');
+                }, 3000);
+            }
+        }
+
+        // Real-time Firestore Listener (Listens to user updates)
+        let isInitialLoad = true;
+        onSnapshot(collection(db, "users"), (snapshot) => {
+            if (isInitialLoad) {
+                isInitialLoad = false;
+                return;
+            }
+
+            snapshot.docChanges().forEach((change) => {
+                if (change.type === "modified") {
+                    const data = change.doc.data();
+                    const userId = change.doc.id;
+                    
+                    if (data.status === "ACTIVE") {
+                        setIndicator('SUCCESS', 'SUCCESS!', `User "${userId}" (${data.name || ''}) Checked In`);
+                    } else {
+                        setIndicator('ERROR', 'DEACTIVATED', `User "${userId}" Set to DEACTIVE`);
+                    }
+                }
+            });
+        });
+    </script>
+</body>
+</html>
