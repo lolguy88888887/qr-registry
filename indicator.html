@@ -3,27 +3,47 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Status Indicator Display</title>
+    <title>Live Camera & Status Indicator</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+    <style>
+        #reader {
+            border: none !important;
+            background: transparent !important;
+        }
+        #reader video {
+            object-fit: cover;
+            border-radius: 1.5rem;
+        }
+    </style>
 </head>
-<body id="bodyBg" class="bg-blue-600 min-h-screen flex flex-col items-center justify-center text-center p-6 transition-colors duration-300">
+<body id="bodyBg" class="bg-blue-900 min-h-screen flex flex-col items-center justify-center text-center p-6 transition-colors duration-300">
 
-    <!-- FULL SCREEN STATUS CONTENT -->
-    <div class="text-white">
-        <h1 id="statusTitle" class="text-6xl font-extrabold mb-4 tracking-wide">READY TO SCAN</h1>
-        <p id="statusMessage" class="text-2xl opacity-90">Waiting for attendance check-in...</p>
+    <!-- MAIN CONTAINER -->
+    <div class="max-w-md w-full bg-white/10 backdrop-blur-md rounded-3xl border-4 border-white/30 p-6 shadow-2xl flex flex-col items-center text-white relative">
+        
+        <h1 id="statusTitle" class="text-2xl font-extrabold mb-2 tracking-wide">READY TO SCAN</h1>
+        <p id="statusMessage" class="text-sm opacity-90 mb-4">QR кодоо камерын өмнө барина уу...</p>
+
+        <!-- CAMERA BOX CONTAINER -->
+        <div id="cameraContainer" class="w-full bg-black rounded-2xl overflow-hidden shadow-inner relative flex items-center justify-center" style="min-height: 280px;">
+            <div id="reader" class="w-full"></div>
+        </div>
+
+        <!-- MESSAGE / RESULT DISPLAY -->
+        <div id="resultBox" class="mt-4 text-sm font-semibold hidden p-3 rounded-xl w-full"></div>
     </div>
 
     <!-- Back to Dashboard Link -->
     <div class="absolute bottom-6 left-6">
-        <a href="index.html" class="bg-white/20 hover:bg-white/30 text-white px-4 py-2 rounded-lg text-sm transition font-medium">&larr; Back to Dashboard</a>
+        <a href="index.html" class="bg-white/20 hover:bg-white/30 text-white px-4 py-2 rounded-lg text-sm transition font-medium">&larr; Dashboard руу буцах</a>
     </div>
 
-    <!-- Firebase SDK & Real-time Listener Logic -->
+    <!-- Firebase SDK & Scanner Logic -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
-        import { getFirestore, collection, onSnapshot } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
+        import { getFirestore, doc, getDoc, updateDoc } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyDMJIliExwHKou9wyckX3_STlA1YIPNhI0",
@@ -41,10 +61,14 @@
         const bodyBg = document.getElementById("bodyBg");
         const statusTitle = document.getElementById("statusTitle");
         const statusMessage = document.getElementById("statusMessage");
+        const cameraContainer = document.getElementById("cameraContainer");
+        const resultBox = document.getElementById("resultBox");
 
+        let html5QrCode = null;
+        let isProcessing = false;
         let resetTimer = null;
 
-        // Web Audio API Beep Sound
+        // Beep дуу гаргах
         function playSound(isSuccess) {
             try {
                 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -61,57 +85,98 @@
                 oscillator.start();
                 oscillator.stop(audioCtx.currentTime + (isSuccess ? 0.15 : 0.4));
             } catch (e) {
-                console.log("Audio play blocked", e);
+                console.log("Audio error:", e);
             }
         }
 
-        // Change Indicator State
-        function setIndicator(type, title, message) {
-            bodyBg.classList.remove("bg-blue-600", "bg-green-600", "bg-red-600");
+        // Дэлгэцийн төлөв өөрчлөх (Ногоон / Улаан болгох үед камерыг түр нуух)
+        function setIndicatorState(type, title, message) {
+            bodyBg.classList.remove("bg-blue-900", "bg-green-600", "bg-red-600");
             
             if (type === 'SUCCESS') {
                 bodyBg.classList.add("bg-green-600");
                 playSound(true);
+                cameraContainer.classList.add("hidden"); // Камерын хэсгийг нууж том өнгө гаргах
+                resultBox.classList.remove("hidden", "bg-red-500/30");
+                resultBox.classList.add("bg-green-500/30");
             } else if (type === 'ERROR') {
                 bodyBg.classList.add("bg-red-600");
                 playSound(false);
+                cameraContainer.classList.add("hidden");
+                resultBox.classList.remove("hidden", "bg-green-500/30");
+                resultBox.classList.add("bg-red-500/30");
             } else {
-                bodyBg.classList.add("bg-blue-600");
+                bodyBg.classList.add("bg-blue-900");
+                cameraContainer.classList.remove("hidden"); // Камерын хэсгийг буцааж гаргах
+                resultBox.classList.add("hidden");
             }
 
             statusTitle.textContent = title;
             statusMessage.textContent = message;
+            resultBox.textContent = message;
 
             if (resetTimer) clearTimeout(resetTimer);
 
-            // Automatically return to BLUE (Idle) after 3 seconds
+            // 4 секундын дараа буцаад камертай хэвийн байдал руу орох
             if (type !== 'IDLE') {
                 resetTimer = setTimeout(() => {
-                    setIndicator('IDLE', 'READY TO SCAN', 'Waiting for attendance check-in...');
-                }, 3000);
+                    setIndicatorState('IDLE', 'READY TO SCAN', 'QR кодоо камерын өмнө барина уу...');
+                    isProcessing = false;
+                }, 4000);
             }
         }
 
-        // Real-time Firestore Listener (Listens to user updates)
-        let isInitialLoad = true;
-        onSnapshot(collection(db, "users"), (snapshot) => {
-            if (isInitialLoad) {
-                isInitialLoad = false;
-                return;
-            }
+        // QR код уншигдахад Firebase руу хандах
+        async function processScan(userId) {
+            userId = userId.trim();
+            if (!userId || isProcessing) return;
+            isProcessing = true;
 
-            snapshot.docChanges().forEach((change) => {
-                if (change.type === "modified") {
-                    const data = change.doc.data();
-                    const userId = change.doc.id;
-                    
-                    if (data.status === "ACTIVE") {
-                        setIndicator('SUCCESS', 'SUCCESS!', `User "${userId}" (${data.name || ''}) Checked In`);
-                    } else {
-                        setIndicator('ERROR', 'DEACTIVATED', `User "${userId}" Set to DEACTIVE`);
-                    }
+            try {
+                const userRef = doc(db, "users", userId);
+                const docSnap = await getDoc(userRef);
+
+                if (docSnap.exists()) {
+                    await updateDoc(userRef, {
+                        status: "ACTIVE",
+                        lastScanned: new Date().toLocaleString()
+                    });
+                    setIndicatorState('SUCCESS', 'SUCCESS!', `User "${userId}" Checked In!`);
+                } else {
+                    setIndicatorState('ERROR', 'NOT FOUND', `User "${userId}" бүртгэлгүй байна!`);
                 }
+            } catch (err) {
+                setIndicatorState('ERROR', 'ERROR', err.message);
+            }
+        }
+
+        // Камер асаах
+        function startScanner() {
+            html5QrCode = new Html5Qrcode("reader");
+            Html5Qrcode.getCameras().then(devices => {
+                if (devices && devices.length) {
+                    const cameraId = devices[0].id;
+                    html5QrCode.start(
+                        cameraId,
+                        { fps: 10, qrbox: { width: 220, height: 220 } },
+                        (decodedText) => {
+                            if (!isProcessing) {
+                                processScan(decodedText);
+                            }
+                        },
+                        (errorMessage) => {}
+                    ).catch(err => {
+                        console.log("Camera start error: ", err);
+                    });
+                }
+            }).catch(err => {
+                console.log("Camera permission error: ", err);
             });
+        }
+
+        // Хуудас ачаалагдахад камер шууд автоматаар асарна
+        window.addEventListener("load", () => {
+            startScanner();
         });
     </script>
 </body>
