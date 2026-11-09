@@ -3,61 +3,27 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Scanner & Status Indicator</title>
+    <title>Status Indicator Display</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
-    <style>
-        #reader {
-            border: none !important;
-            border-radius: 0.75rem;
-            overflow: hidden;
-        }
-        #reader video {
-            object-fit: cover;
-            border-radius: 0.75rem;
-        }
-    </style>
 </head>
-<body id="bodyBg" class="bg-gray-900 min-h-screen flex items-center justify-center p-4 transition-colors duration-300">
+<body id="bodyBg" class="bg-blue-600 min-h-screen flex flex-col items-center justify-center text-center p-6 transition-colors duration-300">
 
-    <div class="max-w-md w-full bg-white rounded-2xl shadow-2xl p-6 text-center relative">
-        <h1 id="statusTitle" class="text-xl font-bold text-gray-800 mb-1">QR Attendance Indicator</h1>
-        <p id="statusMessage" class="text-xs text-gray-500 mb-4">Камераар QR код уншуулна уу.</p>
-
-        <!-- Камер сонгох хэсэг (scanner.html дээр байдаг шиг) -->
-        <div class="mb-3 text-left">
-            <label class="block text-xs font-semibold text-gray-600 mb-1">Камер сонгох:</label>
-            <select id="cameraSelect" class="w-full border rounded-lg px-3 py-2 text-sm bg-gray-50 focus:ring-2 focus:ring-blue-500 outline-none">
-                <option value="">-- Камер хайж байна --</option>
-            </select>
-        </div>
-
-        <!-- Camera Viewfinder Box -->
-        <div class="w-full bg-black rounded-xl overflow-hidden shadow-inner relative flex items-center justify-center" style="min-height: 260px;">
-            <div id="reader" class="w-full"></div>
-        </div>
-
-        <!-- Manual input fallback -->
-        <div class="mt-4 space-y-2">
-            <div class="flex gap-2">
-                <input type="text" id="manualInput" placeholder="Эсвэл User ID гараар бичих..." class="flex-1 border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500">
-                <button id="manualSubmit" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-blue-700 transition">Илгээх</button>
-            </div>
-        </div>
-
-        <div id="resultMsg" class="mt-3 text-sm font-medium"></div>
-
-        <div class="mt-5 pt-3 border-t text-sm flex justify-between">
-            <a href="index.html" class="text-blue-600 font-medium hover:underline">&larr; Dashboard руу буцах</a>
-            <a href="scanner.html" class="text-gray-600 font-medium hover:underline">Scanner руу орох</a>
-        </div>
+    <!-- FULL SCREEN STATUS CONTENT -->
+    <div class="text-white">
+        <h1 id="statusTitle" class="text-6xl font-extrabold mb-4 tracking-wide">READY TO SCAN</h1>
+        <p id="statusMessage" class="text-2xl opacity-90">Waiting for attendance check-in...</p>
     </div>
 
-    <!-- Firebase SDK & Logic -->
+    <!-- Back to Dashboard Link -->
+    <div class="absolute bottom-6 left-6">
+        <a href="index.html" class="bg-white/20 hover:bg-white/30 text-white px-4 py-2 rounded-lg text-sm transition font-medium">&larr; Back to Dashboard</a>
+    </div>
+
+    <!-- Firebase SDK & Real-time Listener Logic -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
-        import { getFirestore, doc, getDoc, updateDoc } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
+        import { getFirestore, collection, onSnapshot } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyDMJIliExwHKou9wyckX3_STlA1YIPNhI0",
@@ -75,134 +41,77 @@
         const bodyBg = document.getElementById("bodyBg");
         const statusTitle = document.getElementById("statusTitle");
         const statusMessage = document.getElementById("statusMessage");
-        const msgDiv = document.getElementById("resultMsg");
-        const cameraSelect = document.getElementById("cameraSelect");
-        
-        let html5QrCode = null;
-        let isProcessing = false;
 
-        // Beep дуу гаргах
-        function playBeep(isSuccess) {
+        let resetTimer = null;
+
+        // Web Audio API Beep Sound
+        function playSound(isSuccess) {
             try {
                 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
                 const oscillator = audioCtx.createOscillator();
                 const gainNode = audioCtx.createGain();
+
                 oscillator.type = "sine";
                 oscillator.frequency.setValueAtTime(isSuccess ? 800 : 300, audioCtx.currentTime);
-                gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                gainNode.gain.setValueAtTime(0.15, audioCtx.currentTime);
+
                 oscillator.connect(gainNode);
                 gainNode.connect(audioCtx.destination);
+
                 oscillator.start();
                 oscillator.stop(audioCtx.currentTime + (isSuccess ? 0.15 : 0.4));
             } catch (e) {
-                console.log("Audio error:", e);
+                console.log("Audio play blocked", e);
             }
         }
 
-        // Дэлгэцийн өнгийг түр хугацаанд өөрчлөх функц
-        function flashIndicator(type, title, message) {
-            bodyBg.classList.remove("bg-gray-900", "bg-green-600", "bg-red-600");
+        // Change Indicator State
+        function setIndicator(type, title, message) {
+            bodyBg.classList.remove("bg-blue-600", "bg-green-600", "bg-red-600");
             
             if (type === 'SUCCESS') {
                 bodyBg.classList.add("bg-green-600");
-                playBeep(true);
+                playSound(true);
             } else if (type === 'ERROR') {
                 bodyBg.classList.add("bg-red-600");
-                playBeep(false);
+                playSound(false);
+            } else {
+                bodyBg.classList.add("bg-blue-600");
             }
 
             statusTitle.textContent = title;
             statusMessage.textContent = message;
-            msgDiv.textContent = message;
 
-            // 3 секундын дараа буцаад хэвийн бараан өнгө болон камер руу орох
-            setTimeout(() => {
-                bodyBg.classList.remove("bg-green-600", "bg-red-600");
-                bodyBg.classList.add("bg-gray-900");
-                statusTitle.textContent = "QR Attendance Indicator";
-                statusMessage.textContent = "Камераар QR код уншуулна уу.";
-                msgDiv.textContent = "";
-                isProcessing = false;
-            }, 3000);
+            if (resetTimer) clearTimeout(resetTimer);
+
+            // Automatically return to BLUE (Idle) after 3 seconds
+            if (type !== 'IDLE') {
+                resetTimer = setTimeout(() => {
+                    setIndicator('IDLE', 'READY TO SCAN', 'Waiting for attendance check-in...');
+                }, 3000);
+            }
         }
 
-        // Firebase дээр хэрэглэгчийг ACTIVE болгох
-        async function processScan(userId) {
-            userId = userId.trim();
-            if (!userId || isProcessing) return;
-            isProcessing = true;
+        // Real-time Firestore Listener (Listens to user updates)
+        let isInitialLoad = true;
+        onSnapshot(collection(db, "users"), (snapshot) => {
+            if (isInitialLoad) {
+                isInitialLoad = false;
+                return;
+            }
 
-            try {
-                const userRef = doc(db, "users", userId);
-                const docSnap = await getDoc(userRef);
-
-                if (docSnap.exists()) {
-                    await updateDoc(userRef, {
-                        status: "ACTIVE",
-                        lastScanned: new Date().toLocaleString()
-                    });
-                    flashIndicator('SUCCESS', 'SUCCESS!', `"${userId}" Амжилттай бүртгэгдлээ.`);
-                } else {
-                    flashIndicator('ERROR', 'NOT FOUND', `"${userId}" бүртгэлгүй хэрэглэгч байна!`);
+            snapshot.docChanges().forEach((change) => {
+                if (change.type === "modified") {
+                    const data = change.doc.data();
+                    const userId = change.doc.id;
+                    
+                    if (data.status === "ACTIVE") {
+                        setIndicator('SUCCESS', 'SUCCESS!', `User "${userId}" (${data.name || ''}) Checked In`);
+                    } else {
+                        setIndicator('ERROR', 'DEACTIVATED', `User "${userId}" Set to DEACTIVE`);
+                    }
                 }
-            } catch (err) {
-                flashIndicator('ERROR', 'ERROR', err.message);
-            }
-        }
-
-        document.getElementById("manualSubmit").addEventListener("click", () => {
-            processScan(document.getElementById("manualInput").value);
-        });
-
-        document.getElementById("manualInput").addEventListener("keypress", (e) => {
-            if (e.key === "Enter") processScan(e.target.value);
-        });
-
-        function startScanner(cameraId) {
-            if (html5QrCode && html5QrCode.isScanning) {
-                html5QrCode.stop().then(() => initCamera(cameraId)).catch(err => console.log(err));
-            } else {
-                initCamera(cameraId);
-            }
-        }
-
-        function initCamera(cameraId) {
-            html5QrCode = new Html5Qrcode("reader");
-            html5QrCode.start(
-                cameraId,
-                { 
-                    fps: 10, 
-                    qrbox: { width: 220, height: 220 } 
-                },
-                (decodedText) => {
-                    processScan(decodedText);
-                },
-                (errorMessage) => {}
-            ).catch(err => {
-                msgDiv.className = "mt-3 text-sm font-semibold text-red-500";
-                msgDiv.textContent = "Камер асаах боломжгүй: " + err;
             });
-        }
-
-        // Камеруудыг автоматаар олох
-        Html5Qrcode.getCameras().then(devices => {
-            if (devices && devices.length) {
-                cameraSelect.innerHTML = "";
-                devices.forEach(device => {
-                    const option = document.createElement("option");
-                    option.value = device.id;
-                    option.text = device.label || `Camera ${cameraSelect.length + 1}`;
-                    cameraSelect.appendChild(option);
-                });
-                startScanner(devices[0].id);
-                cameraSelect.addEventListener("change", (e) => startScanner(e.target.value));
-            } else {
-                msgDiv.className = "mt-3 text-sm font-semibold text-red-500";
-                msgDiv.textContent = "Ямар нэгэн камер олдсонгүй.";
-            }
-        }).catch(err => {
-            msgDiv.className = "mt-3 text-sm font-semibold text-red-500";
-            msgDiv.textContent = "Камерын зөвшөөрөл олдсонгүй: " + err;
         });
     </script>
 </body>
